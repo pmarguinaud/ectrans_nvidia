@@ -12,6 +12,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "../growing_allocator.h"
+
 static const char *_cudaGetErrorEnum(cufftResult error) {
   switch (error) {
   case CUFFT_SUCCESS:
@@ -67,8 +69,6 @@ static const char *_cudaGetErrorEnum(cufftResult error) {
     }                                                                          \
   }
 
-extern void *planWorkspace;
-
 namespace {
 struct Double {
   using real = double;
@@ -78,24 +78,48 @@ struct Float {
   using real = float;
   using cmplx = cufftComplex;
 };
-} // namespace
+
+// kfield -> handles
+template <class Type, cufftType Direction> auto &get_fft_plan_cache() {
+  static std::unordered_map<int, std::vector<cufftHandle>> fftPlansCache;
+  return fftPlansCache;
+}
+// kfield -> graphs
+template <class Type, cufftType Direction> auto &get_graph_cache() {
+  static std::unordered_map<int, cudaGraphExec_t> graphCache;
+  return graphCache;
+}
+// kfield -> ptrs
+template <class Type, cufftType Direction> auto &get_ptr_cache() {
+  using real = typename Type::real;
+  using cmplx = typename Type::cmplx;
+  static std::unordered_map<int, std::pair<real *, cmplx *>> ptrCache;
+  return ptrCache;
+}
+
+template <class Type, cufftType Direction>
+void free_fft_cache(float *, size_t sz) {
+  std::cout << "free fft cache" << std::endl;
+  get_fft_plan_cache<Type, Direction>().clear();
+  get_graph_cache<Type, Direction>().clear();
+  get_ptr_cache<Type, Direction>().clear();
+}
+
 template <class Type, cufftType Direction>
 void execute_fft(typename Type::real *data_real,
                  typename Type::cmplx *data_complex, int kfield, int *loens,
-                 int *offsets, int nfft) {
+                 int *offsets, int nfft, void *growing_allocator) {
+
+  growing_allocator_register_free_c(growing_allocator,
+                                    free_fft_cache<Type, Direction>);
+
   constexpr bool is_forward = Direction == CUFFT_R2C || Direction == CUFFT_D2Z;
   using real = typename Type::real;
   using cmplx = typename Type::cmplx;
 
-  /* static std::unordered_map<int, void *> allocationCache; // nloens -> ptr */
-  static std::unordered_map<int, std::vector<cufftHandle>>
-      fftPlansCache; // kfield -> handles
-  static std::unordered_map<int, cudaGraphExec_t>
-      graphCache; // kfield -> graphs
-
   // if the pointers are changed, we need to update the graph
-  static std::unordered_map<int, std::pair<real *, cmplx *>>
-      ptrCache; // kfield -> ptrs
+  auto &ptrCache = get_ptr_cache<Type, Direction>();     // kfield -> ptrs
+  auto &graphCache = get_graph_cache<Type, Direction>(); // kfield -> graphs
 
   auto ptrs = ptrCache.find(kfield);
   if (ptrs != ptrCache.end() && (ptrs->second.first != data_real ||
@@ -103,7 +127,8 @@ void execute_fft(typename Type::real *data_real,
     // the plan is cached, but the pointers are not correct. we remove and
     // delete the graph, but we keep the FFT plans, if this happens more often,
     // we should cache this...
-    std::cout << "WARNING FFT: POINTER CHANGE --> THIS MIGHT BE SLOW" << std::endl;
+    std::cout << "WARNING FFT: POINTER CHANGE --> THIS MIGHT BE SLOW"
+              << std::endl;
     CUDA_CHECK(cudaGraphExecDestroy(graphCache[kfield]));
     graphCache.erase(kfield);
     ptrCache.erase(kfield);
@@ -113,6 +138,8 @@ void execute_fft(typename Type::real *data_real,
   if (graph == graphCache.end()) {
     // this graph does not exist yet
 
+    auto &fftPlansCache =
+        get_fft_plan_cache<Type, Direction>(); // kfield -> handles
     auto fftPlans = fftPlansCache.find(kfield);
     if (fftPlans == fftPlansCache.end()) {
       // the fft plans do not exist yet
@@ -179,25 +206,31 @@ void execute_fft(typename Type::real *data_real,
   CUDA_CHECK(cudaGraphLaunch(graphCache.at(kfield), 0));
   CUDA_CHECK(cudaDeviceSynchronize());
 }
+} // namespace
+
 extern "C" {
 void execute_dir_fft_float(float *data_real, cufftComplex *data_complex,
-                           int kfield, int *loens, int *offsets, int nfft) {
+                           int kfield, int *loens, int *offsets, int nfft,
+                           void *growing_allocator) {
   execute_fft<Float, CUFFT_R2C>(data_real, data_complex, kfield, loens, offsets,
-                                nfft);
+                                nfft, growing_allocator);
 }
 void execute_inv_fft_float(cufftComplex *data_complex, float *data_real,
-                           int kfield, int *loens, int *offsets, int nfft) {
+                           int kfield, int *loens, int *offsets, int nfft,
+                           void *growing_allocator) {
   execute_fft<Float, CUFFT_C2R>(data_real, data_complex, kfield, loens, offsets,
-                                nfft);
+                                nfft, growing_allocator);
 }
 void execute_dir_fft_double(double *data_real, cufftDoubleComplex *data_complex,
-                            int kfield, int *loens, int *offsets, int nfft) {
+                            int kfield, int *loens, int *offsets, int nfft,
+                            void *growing_allocator) {
   execute_fft<Double, CUFFT_D2Z>(data_real, data_complex, kfield, loens,
-                                 offsets, nfft);
+                                 offsets, nfft, growing_allocator);
 }
 void execute_inv_fft_double(cufftDoubleComplex *data_complex, double *data_real,
-                            int kfield, int *loens, int *offsets, int nfft) {
+                            int kfield, int *loens, int *offsets, int nfft,
+                            void *growing_allocator) {
   execute_fft<Double, CUFFT_Z2D>(data_real, data_complex, kfield, loens,
-                                 offsets, nfft);
+                                 offsets, nfft, growing_allocator);
 }
 }

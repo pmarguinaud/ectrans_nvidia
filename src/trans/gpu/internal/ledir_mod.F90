@@ -13,6 +13,7 @@
 MODULE LEDIR_MOD
   USE PARKIND_ECTRANS  ,ONLY : JPIM
   USE TPM_TRANS, ONLY: LEDIR_CONFIG
+  USE BUFFERED_ALLOCATOR_MOD
   IMPLICIT NONE
 
   PRIVATE
@@ -53,7 +54,7 @@ CONTAINS
         IIN0_SIZE = IIN0_STRIDES0 * ALIGN(R%NDGNH,A)
   END SUBROUTINE
 
-  SUBROUTINE LEDIR(ZINPS,ZINPA,ZINPS0,ZINPA0,ZOUT,ZOUT0,POA1,KF_FS)
+  SUBROUTINE LEDIR(ALLOCATOR,ZINPS,ZINPA,ZINPS0,ZINPA0,ZOUT,ZOUT0,POA1,KF_FS)
     !**** *LEDIR* - Direct Legendre transform.
 
     !     Purpose.
@@ -119,6 +120,7 @@ CONTAINS
     REAL(KIND=JPRD), INTENT(INOUT) ::  ZOUT0(:)
     REAL(KIND=JPRBT),  INTENT(OUT), POINTER :: POA1(:,:,:)
     INTEGER(KIND=JPIM), INTENT(IN)  :: KF_FS
+    TYPE(BUFFERED_ALLOCATOR), INTENT(IN) :: ALLOCATOR
 
     !     LOCAL VARIABLES
     INTEGER(KIND=JPIM)  :: KM
@@ -171,7 +173,7 @@ CONTAINS
         & ZAA0, SIZE(ZAA0,1), 0, &
         & 0.0_JPRD, &
         & ZOUT0, IOUT0_STRIDES0, 0, &
-        & 1, STREAM=1_C_LONG)
+        & 1, STREAM=1_C_LONG, ALLOC=ALLOCATOR%PTR)
     ENDIF
     ! Get C in transpose format to get better memory access patterns later
     !C=A*B =>
@@ -197,7 +199,7 @@ CONTAINS
       & ZAA, SIZE(ZAA,1), BOFFSETS, &
       & 0.0_JPRBT, &
       & ZOUT, IOUT_STRIDES0, COFFSETS, &
-      & D_NUMP, STREAM=1_C_LONG)
+      & D_NUMP, STREAM=1_C_LONG, ALLOC=ALLOCATOR%PTR)
     IF (LSYNC_TRANS) THEN
       !$ACC WAIT(1)
       CALL GSTATS(434,0)
@@ -245,7 +247,7 @@ CONTAINS
         & ZAS0, SIZE(ZAS0,1), 0, &
         & 0.0_JPRD, &
         & ZOUT0, IOUT0_STRIDES0, 0, &
-        & 1, STREAM=1_C_LONG)
+        & 1, STREAM=1_C_LONG, ALLOC=ALLOCATOR%PTR)
     ENDIF
 
     ! Get C in transpose format to get better memory access patterns later
@@ -272,7 +274,7 @@ CONTAINS
       & ZAS, SIZE(ZAS,1), BOFFSETS, &
       & 0.0_JPRBT, &
       & ZOUT, IOUT_STRIDES0, COFFSETS, &
-      & D_NUMP, STREAM=1_C_LONG)
+      & D_NUMP, STREAM=1_C_LONG, ALLOC=ALLOCATOR%PTR)
     IF (LSYNC_TRANS) THEN
       !$ACC WAIT(1)
       CALL GSTATS(434,0)

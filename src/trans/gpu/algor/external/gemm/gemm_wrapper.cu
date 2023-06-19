@@ -17,6 +17,8 @@
 #include "cublas_v2.h"
 #include "cutlass/gemm/device/gemm.h"
 
+#include "../growing_allocator.h"
+
 constexpr bool use_cutlass = true;
 
 #define CUDA_CHECK(e)                                                          \
@@ -28,23 +30,23 @@ constexpr bool use_cutlass = true;
       exit(EXIT_FAILURE);                                                      \
     }                                                                          \
   }
-#define CUBLAS_CHECK(e)                                                \
-  {                                                                    \
-    cublasStatus_t err = (e);                                          \
-    if (err != CUBLAS_STATUS_SUCCESS) {                                \
-      fprintf(stderr, "CUBLAS error: %s, line %d, %s: %i\n", __FILE__, \
-              __LINE__, #e, err);                                      \
-      exit(EXIT_FAILURE);                                              \
-    }                                                                  \
+#define CUBLAS_CHECK(e)                                                        \
+  {                                                                            \
+    cublasStatus_t err = (e);                                                  \
+    if (err != CUBLAS_STATUS_SUCCESS) {                                        \
+      fprintf(stderr, "CUBLAS error: %s, line %d, %s: %i\n", __FILE__,         \
+              __LINE__, #e, err);                                              \
+      exit(EXIT_FAILURE);                                                      \
+    }                                                                          \
   }
-#define CUTLASS_CHECK(e)                                                \
-  {                                                                     \
-    cutlass::Status err = (e);                                          \
-    if (err != cutlass::Status::kSuccess) {                             \
-      fprintf(stderr, "CUTLASS error: %s, line %d, %s: %i\n", __FILE__, \
-              __LINE__, #e, (int)err);                                  \
-      exit(EXIT_FAILURE);                                               \
-    }                                                                   \
+#define CUTLASS_CHECK(e)                                                       \
+  {                                                                            \
+    cutlass::Status err = (e);                                                 \
+    if (err != cutlass::Status::kSuccess) {                                    \
+      fprintf(stderr, "CUTLASS error: %s, line %d, %s: %i\n", __FILE__,        \
+              __LINE__, #e, (int)err);                                         \
+      exit(EXIT_FAILURE);                                                      \
+    }                                                                          \
   }
 
 namespace {
@@ -54,7 +56,28 @@ struct pair_hash {
     return p.first * 10000 + p.second;
   }
 };
-}  // namespace detail
+} // namespace detail
+
+template <typename Gemm, typename Real> auto &get_graph_cache() {
+  // we store at most one graph per "m" (# fields) and "blas id"
+  static std::unordered_map<std::pair<int, int>, cudaGraphExec_t,
+                            detail::pair_hash>
+      graphCache;
+  return graphCache;
+}
+template <typename Gemm, typename Real> auto &get_ptr_cache() {
+  static std::unordered_map<
+      std::pair<int, int>, std::tuple<Real const *, Real const *, Real const *>,
+      detail::pair_hash>
+      ptrCache;
+  return ptrCache;
+}
+
+template <typename Gemm, typename Real> void free_gemm_cache(float *, size_t) {
+  std::cout << "free gemm cache" << std::endl;
+  get_graph_cache<Gemm, Real>().clear();
+  get_ptr_cache<Gemm, Real>().clear();
+}
 
 // this version is using cuda graphs and caches the graphs
 template <typename Gemm, typename Real>
@@ -62,17 +85,15 @@ void run_group_graph(Gemm &&gemm, int m, int *n, int *k, Real alpha,
                      const Real *A, int lda, int *offsetsA, const Real *B,
                      int ldb, int *offsetsB, Real beta, Real *C, int ldc,
                      int *offsetsC, int batchCount, cudaStream_t stream,
-                     int blas_id = -1) {
+                     int blas_id, void *growing_allocator) {
+  growing_allocator_register_free_c(growing_allocator,
+                                    free_gemm_cache<Gemm, Real>);
+
   // we store at most one graph per "m" (# fields) and "blas id"
-  static std::unordered_map<std::pair<int, int>, cudaGraphExec_t,
-                            detail::pair_hash>
-      graphCache;
+  auto &graphCache = get_graph_cache<Gemm, Real>();
 
   // we also store A, B, and C and recreate the graph if they change
-  static std::unordered_map<
-      std::pair<int, int>, std::tuple<Real const *, Real const *, Real const *>,
-      detail::pair_hash>
-      ptrCache;
+  auto &ptrCache = get_ptr_cache<Gemm, Real>();
 
   auto key = std::make_pair(m, blas_id);
 
@@ -83,10 +104,13 @@ void run_group_graph(Gemm &&gemm, int m, int *n, int *k, Real alpha,
     // the plan is cached, but the pointers are not correct. we remove and
     // delete the graph, but we keep the cublas handles, if this happens more
     // often, we should cache this...
-    std::cout << "WARNING GEMM: POINTER CHANGE - Graph recreation might be slow.\n";
-    std::cout << "We have an entry with key {m=" << m << ", blas_id=" << blas_id << "}\n";
-    std::cout << "Pointers: " << std::get<0>(ptrs->second) << ", " << std::get<1>(ptrs->second) << ", " << std::get<2>(ptrs->second)  << " vs. "
-            << A << ", " << B << ", " << C << std::endl;
+    std::cout
+        << "WARNING GEMM: POINTER CHANGE - Graph recreation might be slow.\n";
+    std::cout << "We have an entry with key {m=" << m << ", blas_id=" << blas_id
+              << "}\n";
+    std::cout << "Pointers: " << std::get<0>(ptrs->second) << ", "
+              << std::get<1>(ptrs->second) << ", " << std::get<2>(ptrs->second)
+              << " vs. " << A << ", " << B << ", " << C << std::endl;
     CUDA_CHECK(cudaGraphExecDestroy(graphCache[key]));
     graphCache.erase(key);
     ptrCache.erase(key);
@@ -101,7 +125,8 @@ void run_group_graph(Gemm &&gemm, int m, int *n, int *k, Real alpha,
     cudaGraph_t new_graph;
     cudaGraphCreate(&new_graph, 0);
     for (int i = 0; i < batchCount; ++i) {
-      if (m == 0 || n[i] == 0 || k[i] == 0) continue;
+      if (m == 0 || n[i] == 0 || k[i] == 0)
+        continue;
 
       CUDA_CHECK(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal));
       gemm(stream, m, n[i], k[i], alpha, A + offsetsA[i], lda, B + offsetsB[i],
@@ -131,14 +156,14 @@ void run_group(Gemm &&gemm, int m, int *n, int *k, Real alpha, const Real *A,
                Real beta, Real *C, int ldc, int *offsetsC, int batchCount,
                cudaStream_t stream, int = -1) {
   for (int i = 0; i < batchCount; ++i) {
-    if (m == 0 || n[i] == 0 || k[i] == 0) continue;
+    if (m == 0 || n[i] == 0 || k[i] == 0)
+      continue;
     gemm(stream, m, n[i], k[i], alpha, A + offsetsA[i], lda, B + offsetsB[i],
          ldb, beta, C + offsetsC[i], ldc);
   }
 }
 
-template <typename CutlassGemm>
-CutlassGemm &get_cutlass_handle() {
+template <typename CutlassGemm> CutlassGemm &get_cutlass_handle() {
   static auto handle = std::make_unique<CutlassGemm>();
   return *handle;
 }
@@ -164,30 +189,30 @@ class cutlass_sgemm_grouped<CutlassType::cutlass_3xtf32, TransA, TransB> {
   using Gemm = cutlass::gemm::device::Gemm<
       float,
       std::conditional_t<TransA == CUBLAS_OP_N, cutlass::layout::ColumnMajor,
-                         cutlass::layout::RowMajor>,  //
+                         cutlass::layout::RowMajor>, //
       float,
       std::conditional_t<TransB == CUBLAS_OP_N, cutlass::layout::ColumnMajor,
-                         cutlass::layout::RowMajor>,  //
-      float, cutlass::layout::ColumnMajor,            //
-      float,                                          //
-      OperatorClass, cutlass::arch::Sm80,             //
-      ThreadblockShape, WarpShape, InstructionShape,  //
-      cutlass::epilogue::thread::LinearCombination<   //
-          float,                                      //
+                         cutlass::layout::RowMajor>, //
+      float, cutlass::layout::ColumnMajor,           //
+      float,                                         //
+      OperatorClass, cutlass::arch::Sm80,            //
+      ThreadblockShape, WarpShape, InstructionShape, //
+      cutlass::epilogue::thread::LinearCombination<  //
+          float,                                     //
           128 / cutlass::sizeof_bits<float>::value,
-          float,                                                     //
-          float                                                      //
-          >,                                                         //
-      cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>,  //
-      3,                                                             //
-      AlignmentA,                                                    //
-      AlignmentB,                                                    //
-      true,                                                          //
-      MyOp                                                           //
+          float,                                                    //
+          float                                                     //
+          >,                                                        //
+      cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, //
+      3,                                                            //
+      AlignmentA,                                                   //
+      AlignmentB,                                                   //
+      true,                                                         //
+      MyOp                                                          //
       >;
   static constexpr int sz_align = 8;
 
- public:
+public:
   void operator()(cudaStream_t stream, int m, int n, int k, float alpha,
                   const float *A, int lda, const float *B, int ldb, float beta,
                   float *C, int ldc) const {
@@ -217,32 +242,32 @@ class cutlass_sgemm_grouped<CutlassType::cutlass_fp32, TransA, TransB> {
   using MyOp = cutlass::arch::OpMultiplyAdd;
 
   using Gemm = cutlass::gemm::device::Gemm<
-      float,  //
+      float, //
       std::conditional_t<TransA == CUBLAS_OP_N, cutlass::layout::ColumnMajor,
-                         cutlass::layout::RowMajor>,  //
-      float,                                          //
+                         cutlass::layout::RowMajor>, //
+      float,                                         //
       std::conditional_t<TransB == CUBLAS_OP_N, cutlass::layout::ColumnMajor,
-                         cutlass::layout::RowMajor>,                 //
-      float, cutlass::layout::ColumnMajor,                           //
-      float,                                                         //
-      OperatorClass, cutlass::arch::Sm70,                            //
-      ThreadblockShape, WarpShape, InstructionShape,                 //
-      cutlass::epilogue::thread::LinearCombination<                  //
-          float,                                                     //
-          1,                                                         //
-          float,                                                     //
-          float                                                      //
-          >,                                                         //
-      cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>,  //
-      2,                                                             //
-      AlignmentA,                                                    //
-      AlignmentB,                                                    //
-      true,                                                          //
-      MyOp                                                           //
+                         cutlass::layout::RowMajor>,                //
+      float, cutlass::layout::ColumnMajor,                          //
+      float,                                                        //
+      OperatorClass, cutlass::arch::Sm70,                           //
+      ThreadblockShape, WarpShape, InstructionShape,                //
+      cutlass::epilogue::thread::LinearCombination<                 //
+          float,                                                    //
+          1,                                                        //
+          float,                                                    //
+          float                                                     //
+          >,                                                        //
+      cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>, //
+      2,                                                            //
+      AlignmentA,                                                   //
+      AlignmentB,                                                   //
+      true,                                                         //
+      MyOp                                                          //
       >;
   static constexpr int sz_align = 1;
 
- public:
+public:
   void operator()(cudaStream_t stream, int m, int n, int k, float alpha,
                   const float *A, int lda, const float *B, int ldb, float beta,
                   float *C, int ldc) const {
@@ -261,14 +286,15 @@ class cutlass_sgemm_grouped<CutlassType::cutlass_fp32, TransA, TransB> {
   }
 };
 
-}  // namespace detail
+} // namespace detail
 template <cublasOperation_t TransA, cublasOperation_t TransB>
 void cutlass_sgemm_wrapper_grouped_op(int blas_id, int m, int *n, int *k,
                                       float alpha, const float *A, int lda,
                                       int *offsetsA, const float *B, int ldb,
                                       int *offsetsB, float beta, float *C,
                                       int ldc, int *offsetsC, int batchCount,
-                                      cudaStream_t stream) {
+                                      cudaStream_t stream,
+                                      void *growing_allocator) {
   using namespace detail;
   int device;
   CUDA_CHECK(cudaGetDevice(&device));
@@ -279,12 +305,14 @@ void cutlass_sgemm_wrapper_grouped_op(int blas_id, int m, int *n, int *k,
     run_group_graph(cutlass_sgemm_grouped<detail::CutlassType::cutlass_3xtf32,
                                           TransA, TransB>(),
                     m, n, k, alpha, A, lda, offsetsA, B, ldb, offsetsB, beta, C,
-                    ldc, offsetsC, batchCount, stream, blas_id);
+                    ldc, offsetsC, batchCount, stream, blas_id,
+                    growing_allocator);
   else
     run_group_graph(cutlass_sgemm_grouped<detail::CutlassType::cutlass_fp32,
                                           TransA, TransB>(),
                     m, n, k, alpha, A, lda, offsetsA, B, ldb, offsetsB, beta, C,
-                    ldc, offsetsC, batchCount, stream, blas_id);
+                    ldc, offsetsC, batchCount, stream, blas_id,
+                    growing_allocator);
 }
 void cutlass_sgemm_wrapper_grouped(int blas_id, cublasOperation_t transa,
                                    cublasOperation_t transb, int m, int *n,
@@ -292,23 +320,24 @@ void cutlass_sgemm_wrapper_grouped(int blas_id, cublasOperation_t transa,
                                    int *offsetsA, const float *B, int ldb,
                                    int *offsetsB, float beta, float *C, int ldc,
                                    int *offsetsC, int batchCount,
-                                   cudaStream_t stream) {
+                                   cudaStream_t stream,
+                                   void *growing_allocator) {
   if (transa == CUBLAS_OP_N && transb == CUBLAS_OP_N)
     cutlass_sgemm_wrapper_grouped_op<CUBLAS_OP_N, CUBLAS_OP_N>(
         blas_id, m, n, k, alpha, A, lda, offsetsA, B, ldb, offsetsB, beta, C,
-        ldc, offsetsC, batchCount, stream);
+        ldc, offsetsC, batchCount, stream, growing_allocator);
   else if (transa == CUBLAS_OP_N && transb == CUBLAS_OP_T)
     cutlass_sgemm_wrapper_grouped_op<CUBLAS_OP_N, CUBLAS_OP_T>(
         blas_id, m, n, k, alpha, A, lda, offsetsA, B, ldb, offsetsB, beta, C,
-        ldc, offsetsC, batchCount, stream);
+        ldc, offsetsC, batchCount, stream, growing_allocator);
   else if (transa == CUBLAS_OP_T && transb == CUBLAS_OP_N)
     cutlass_sgemm_wrapper_grouped_op<CUBLAS_OP_T, CUBLAS_OP_N>(
         blas_id, m, n, k, alpha, A, lda, offsetsA, B, ldb, offsetsB, beta, C,
-        ldc, offsetsC, batchCount, stream);
+        ldc, offsetsC, batchCount, stream, growing_allocator);
   else if (transa == CUBLAS_OP_T && transb == CUBLAS_OP_T)
     cutlass_sgemm_wrapper_grouped_op<CUBLAS_OP_T, CUBLAS_OP_T>(
         blas_id, m, n, k, alpha, A, lda, offsetsA, B, ldb, offsetsB, beta, C,
-        ldc, offsetsC, batchCount, stream);
+        ldc, offsetsC, batchCount, stream, growing_allocator);
   else
     assert(false);
 }
@@ -316,12 +345,12 @@ void cutlass_sgemm_wrapper_grouped(int blas_id, cublasOperation_t transa,
 namespace detail {
 cublasHandle_t get_cublas_handle() {
   static cublasHandle_t handle;
-  if (!handle) CUBLAS_CHECK(cublasCreate(&handle));
+  if (!handle)
+    CUBLAS_CHECK(cublasCreate(&handle));
   return handle;
 }
-template <typename Real>
-struct cublas_gemm_grouped {
- public:
+template <typename Real> struct cublas_gemm_grouped {
+public:
   cublas_gemm_grouped(cublasOperation_t transa, cublasOperation_t transb)
       : transa_(transa), transb_(transb) {
     // we need to get the cublas handle here, otherwise this could be created
@@ -342,21 +371,22 @@ struct cublas_gemm_grouped {
                                lda, B, ldb, &beta, C, ldc));
   }
 
- private:
+private:
   cublasOperation_t transa_, transb_;
 };
-}  // namespace detail
+} // namespace detail
 void cublas_sgemm_wrapper_grouped(int blas_id, cublasOperation_t transa,
                                   cublasOperation_t transb, int m, int *n,
                                   int *k, float alpha, const float *A, int lda,
                                   int *offsetsA, const float *B, int ldb,
                                   int *offsetsB, float beta, float *C, int ldc,
                                   int *offsetsC, int batchCount,
-                                  cudaStream_t stream) {
+                                  cudaStream_t stream,
+                                  void *growing_allocator) {
   using namespace detail;
   run_group_graph(cublas_gemm_grouped<float>(transa, transb), m, n, k, alpha, A,
                   lda, offsetsA, B, ldb, offsetsB, beta, C, ldc, offsetsC,
-                  batchCount, stream, blas_id);
+                  batchCount, stream, blas_id, growing_allocator);
 }
 void cublas_dgemm_wrapper_grouped(int blas_id, cublasOperation_t transa,
                                   cublasOperation_t transb, int m, int *n,
@@ -364,21 +394,22 @@ void cublas_dgemm_wrapper_grouped(int blas_id, cublasOperation_t transa,
                                   int lda, int *offsetsA, const double *B,
                                   int ldb, int *offsetsB, double beta,
                                   double *C, int ldc, int *offsetsC,
-                                  int batchCount, cudaStream_t stream) {
+                                  int batchCount, cudaStream_t stream, void *) {
   using namespace detail;
   run_group(cublas_gemm_grouped<double>(transa, transb), m, n, k, alpha, A, lda,
             offsetsA, B, ldb, offsetsB, beta, C, ldc, offsetsC, batchCount,
             stream, blas_id);
 }
 
-}  // namespace
+} // namespace
 
 extern "C" {
 void cublas_dgemm_wrapper(cublasOperation_t transa, cublasOperation_t transb,
                           int m, int n, int k, double alpha, const double *A,
                           int lda, int tda, const double *B, int ldb, int tdb,
                           double beta, double *C, int ldc, int tdc,
-                          int batchCount, size_t stream) {
+                          int batchCount, size_t stream,
+                          void *growing_allocator) {
   cublasHandle_t handle = detail::get_cublas_handle();
   CUBLAS_CHECK(cublasSetStream(handle, *(cudaStream_t *)stream));
   CUBLAS_CHECK(cublasDgemmStridedBatched(handle, transa, transb, m, n, k,
@@ -390,7 +421,8 @@ void cublas_sgemm_wrapper(cublasOperation_t transa, cublasOperation_t transb,
                           int m, int n, int k, float alpha, const float *A,
                           int lda, int tda, const float *B, int ldb, int tdb,
                           float beta, float *C, int ldc, int tdc,
-                          int batchCount, size_t stream) {
+                          int batchCount, size_t stream,
+                          void *growing_allocator) {
   cublasHandle_t handle = detail::get_cublas_handle();
   CUBLAS_CHECK(cublasSetStream(handle, *(cudaStream_t *)stream));
   CUBLAS_CHECK(cublasSgemmStridedBatched(handle, transa, transb, m, n, k,
@@ -403,24 +435,29 @@ void blas_sgemm_wrapper_grouped(int blas_id, cublasOperation_t transa,
                                 float alpha, const float *A, int lda,
                                 int *offsetsA, const float *B, int ldb,
                                 int *offsetsB, float beta, float *C, int ldc,
-                                int *offsetsC, int batchCount, size_t stream) {
+                                int *offsetsC, int batchCount, size_t stream,
+                                void *growing_allocator) {
   if (use_cutlass)
-    cutlass_sgemm_wrapper_grouped(
-        blas_id, transa, transb, m, n, k, alpha, A, lda, offsetsA, B, ldb,
-        offsetsB, beta, C, ldc, offsetsC, batchCount, *(cudaStream_t *)stream);
+    cutlass_sgemm_wrapper_grouped(blas_id, transa, transb, m, n, k, alpha, A,
+                                  lda, offsetsA, B, ldb, offsetsB, beta, C, ldc,
+                                  offsetsC, batchCount, *(cudaStream_t *)stream,
+                                  growing_allocator);
   else
-    cublas_sgemm_wrapper_grouped(blas_id, transa, transb, m, n, k, alpha, A, lda,
-                                 offsetsA, B, ldb, offsetsB, beta, C, ldc,
-                                 offsetsC, batchCount, *(cudaStream_t *)stream);
+    cublas_sgemm_wrapper_grouped(blas_id, transa, transb, m, n, k, alpha, A,
+                                 lda, offsetsA, B, ldb, offsetsB, beta, C, ldc,
+                                 offsetsC, batchCount, *(cudaStream_t *)stream,
+                                 growing_allocator);
 }
 void blas_dgemm_wrapper_grouped(int blas_id, cublasOperation_t transa,
                                 cublasOperation_t transb, int m, int *n, int *k,
                                 double alpha, const double *A, int lda,
                                 int *offsetsA, const double *B, int ldb,
                                 int *offsetsB, double beta, double *C, int ldc,
-                                int *offsetsC, int batchCount, size_t stream) {
-  cublas_dgemm_wrapper_grouped(blas_id, transa, transb, m, n, k, alpha, A, lda, offsetsA,
-                               B, ldb, offsetsB, beta, C, ldc, offsetsC,
-                               batchCount, *(cudaStream_t *)stream);
+                                int *offsetsC, int batchCount, size_t stream,
+                                void *growing_allocator) {
+  cublas_dgemm_wrapper_grouped(blas_id, transa, transb, m, n, k, alpha, A, lda,
+                               offsetsA, B, ldb, offsetsB, beta, C, ldc,
+                               offsetsC, batchCount, *(cudaStream_t *)stream,
+                               growing_allocator);
 }
 }

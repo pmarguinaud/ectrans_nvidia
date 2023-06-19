@@ -227,7 +227,7 @@ character(len=16) :: cgrid
 luse_mpi = detect_mpirun()
 
 ! Setup
-call get_command_line_arguments(nsmax, cgrid, iters, nfld, nlev, lvordiv, lscders, luvders, luseflt, nproma, verbose, ldump_values)
+call get_command_line_arguments(nsmax, cgrid, iters, nfld, nlev, lvordiv, lscders, luvders, luseflt, nproma, nprtrv, nprtrw, verbose, ldump_values)
 if (cgrid == '') cgrid = cubic_octahedral_gaussian_grid(nsmax)
 call parse_grid(cgrid,ndgl,nloen)
 nflevg = nfld
@@ -972,7 +972,7 @@ subroutine parsing_failed(message)
 end subroutine
 
 subroutine get_command_line_arguments(nsmax, cgrid, iters, nfld, nlev, lvordiv, lscders, luvders, lflt, &
-  &                                   nproma, verbose, ldump_values)
+  &                                   nproma, nprtrv, nprtrw, verbose, ldump_values)
 
   integer, intent(inout) :: nsmax   ! Spectral truncation
   character(len=16), intent(inout) :: cgrid ! Spectral truncation
@@ -984,6 +984,8 @@ subroutine get_command_line_arguments(nsmax, cgrid, iters, nfld, nlev, lvordiv, 
   logical, intent(inout) :: luvders ! Compute uv East-West derivatives
   logical, intent(inout) :: lflt    ! use fast Legendre transforms
   integer, intent(inout) :: nproma  ! NPROMA
+  integer, intent(inout) :: nprtrv  ! NPRTRV
+  integer, intent(inout) :: nprtrw  ! NPRTRW
   logical, intent(inout) :: verbose ! Print verbose output or not
   logical, intent(inout) :: ldump_values
 
@@ -1035,6 +1037,8 @@ subroutine get_command_line_arguments(nsmax, cgrid, iters, nfld, nlev, lvordiv, 
       case('--uvders'); luvders = .True.
       case('--flt'); lflt = .True.
       case('--nproma'); nproma = get_int_value(iarg)
+      case('--nprtrv'); nprtrv = get_int_value(iarg)
+      case('--nprtrw'); nprtrw = get_int_value(iarg)
       case('--dump-values'); ldump_values = .true.
       case default
         call parsing_failed("Unrecognised argument: " // trim(carg))
@@ -1143,6 +1147,8 @@ subroutine print_help(unit)
   write(nout, "(a)") "    --uvders            Compute uv East-West derivatives (default off). Only when also --vordiv is given"
   write(nout, "(a)") "    --flt               Run with fast Legendre transforms (default off)"
   write(nout, "(a)") "    --nproma NPROMA     Run with NPROMA (default no blocking: NPROMA=ngptot)"
+  write(nout, "(a)") "    --nprtrv NPRTRV     Run with NPRTRV"
+  write(nout, "(a)") "    --nprtrw NPRTRW     Run with NPRTRW"
   write(nout, "(a)") ""
   write(nout, "(a)") "DEBUGGING"
   write(nout, "(a)") "    --dump-values       Output gridpoint fields in unformatted binary file"

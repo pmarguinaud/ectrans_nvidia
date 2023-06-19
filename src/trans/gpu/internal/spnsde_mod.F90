@@ -87,7 +87,7 @@ INTEGER(KIND=JPIM) :: IJ, ISKIP, J, JN,JI, IR, II
 
 !$ACC DATA                             &
 !$ACC      PRESENT (D)   &
-!$ACC      PRESENT (PEPSNM,PF,PNSD)
+!$ACC      PRESENT (PEPSNM,PF,PNSD) ASYNC(1)
 
 !     ------------------------------------------------------------------
 
@@ -97,7 +97,7 @@ INTEGER(KIND=JPIM) :: IJ, ISKIP, J, JN,JI, IR, II
 
 !*       1.1      COMPUTE
 
-!$ACC PARALLEL LOOP COLLAPSE(3) PRIVATE(IR,II,KM,JI) DEFAULT(NONE)
+!$ACC PARALLEL LOOP COLLAPSE(3) PRIVATE(IR,II,KM,JI) DEFAULT(NONE) ASYNC(1)
 DO KMLOC=1,D%NUMP
   DO JN=0,R_NTMAX+1
     DO J=1,KF_SCALARS

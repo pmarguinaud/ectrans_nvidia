@@ -365,16 +365,17 @@ CONTAINS
         ENDIF
       ENDIF
     ENDIF
-    !$ACC END DATA
-    !$ACC END DATA
-    !$ACC END DATA
-    !$ACC END DATA
-    !$ACC END DATA
 
     ! Compute NS derivatives if needed
     IF (LSCDERS) THEN
       CALL SPNSDE(KF_SCALARS,ZEPSNM,PSCALARS,PSCALARS_NSDER)
     ENDIF
+    !$ACC WAIT(1)
+    !$ACC END DATA
+    !$ACC END DATA
+    !$ACC END DATA
+    !$ACC END DATA
+    !$ACC END DATA
 
     !     ------------------------------------------------------------------
 

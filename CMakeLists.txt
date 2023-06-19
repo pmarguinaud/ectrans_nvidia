@@ -66,7 +66,7 @@ ecbuild_add_option( FEATURE TRANSI
 
 # Following is NVHPC compiler specific and should really be coming from external input
 if( CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC" )
-  set( OpenACC_Fortran_FLAGS "-acc -gpu=lineinfo,deepcopy,fastmath,nordc" )
+  set( OpenACC_Fortran_FLAGS "-acc -gpu=lineinfo,deepcopy,fastmath,nordc,pinned" )
   # Pass cmake command-line option "-DCMAKE_Fortran_FLAGS=-Minfo=acc" for diagnostics info
 endif()
 

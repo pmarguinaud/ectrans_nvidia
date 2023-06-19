@@ -91,7 +91,7 @@ REAL(KIND=JPRBT) :: ZKM
 !$ACC DATA                                     &
 !$ACC      PRESENT(D,D%MYMS,F,F%RLAPIN,F%RN)   &
 !$ACC      PRESENT(PEPSNM, PVOR, PDIV)         &
-!$ACC      PRESENT(PU, PV, D_MYMS)
+!$ACC      PRESENT(PU, PV, D_MYMS) ASYNC(1)
 
 
 !     ------------------------------------------------------------------
@@ -99,7 +99,7 @@ REAL(KIND=JPRBT) :: ZKM
 !*       1.    COMPUTE U V FROM VORTICITY AND DIVERGENCE.
 !              ------------------------------------------
 
-!$ACC PARALLEL LOOP COLLAPSE(3) PRIVATE(IR,II,KM,ZKM,JI) DEFAULT(NONE)
+!$ACC PARALLEL LOOP COLLAPSE(3) PRIVATE(IR,II,KM,ZKM,JI) DEFAULT(NONE) ASYNC(1)
 DO KMLOC=1,D%NUMP
   DO JN=0,R_NTMAX+1
     DO J=1,KFIELD

@@ -74,7 +74,6 @@ template <typename Gemm, typename Real> auto &get_ptr_cache() {
 }
 
 template <typename Gemm, typename Real> void free_gemm_cache(float *, size_t) {
-  std::cout << "free gemm cache" << std::endl;
   get_graph_cache<Gemm, Real>().clear();
   get_ptr_cache<Gemm, Real>().clear();
 }

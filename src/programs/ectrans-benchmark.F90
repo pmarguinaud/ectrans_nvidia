@@ -385,6 +385,15 @@ if (verbose) then
   write(nout,'(a)')'======= Setup ectrans ======='
 endif
 
+if( lstats ) then
+  call gstats(0,0)
+  call gstats_setup(nproc,myproc,nprcids,&
+   & lstats,lstatscpu,lsyncstats,ldetailed_stats,lbarrier_stats,lbarrier_stats2,&
+   & lstats_omp,lstats_comms,lstats_mem,nstats_mem,lstats_alloc,&
+   & ltrace_stats,ntrace_stats,nprnt_stats,lxml_stats)
+  call gstats_psut
+endif
+
 call setup_trans0(kout=nout,kerr=nerr,kprintlev=merge(2, 0, verbose),kmax_resol=nmax_resol, &
 &                 kpromatr=npromatr,kprgpns=nprgpns,kprgpew=nprgpew,kprtrw=nprtrw, &
 &                 kcombflen=ncombflen,ldsync_trans=lsync_trans, &
@@ -584,17 +593,6 @@ if (verbose .and. myproc == 1) then
   write(nout,'(a)') '======= Start of spectral transforms  ======='
   write(nout,'(" ")')
 end if
-
-if( lstats ) then
-  call gstats(0,0)
-  call gstats_setup(nproc,myproc,nprcids,&
-   & lstats,lstatscpu,lsyncstats,ldetailed_stats,lbarrier_stats,lbarrier_stats2,&
-   & lstats_omp,lstats_comms,lstats_mem,nstats_mem,lstats_alloc,&
-   & ltrace_stats,ntrace_stats,nprnt_stats,lxml_stats)
-  call gstats_psut
-  ! TODO: what is this?
-  !call gstats_label_ifs
-endif
 
 ztloop=timef()
 

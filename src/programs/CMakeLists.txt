@@ -50,6 +50,8 @@ foreach( prec sp dp )
                                trans_gpu_${prec}
                                OpenACC::OpenACC_Fortran
                             )
+      target_compile_definitions(ectrans-benchmark-gpu-${prec} PUBLIC USE_GPU)
+      target_compile_options(ectrans-benchmark-gpu-${prec} PUBLIC -cuda )
     endif()
   endif()
 endforeach()

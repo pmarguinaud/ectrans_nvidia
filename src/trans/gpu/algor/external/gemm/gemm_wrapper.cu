@@ -80,11 +80,12 @@ template <typename Gemm, typename Real> void free_gemm_cache(float *, size_t) {
 
 // this version is using cuda graphs and caches the graphs
 template <typename Gemm, typename Real>
-void run_group_graph(Gemm &&gemm, int m, int *n, int *k, Real alpha,
-                     const Real *A, int lda, int *offsetsA, const Real *B,
-                     int ldb, int *offsetsB, Real beta, Real *C, int ldc,
-                     int *offsetsC, int batchCount, cudaStream_t stream,
-                     int blas_id, void *growing_allocator) {
+void run_group_graph(Gemm &&gemm, int const m, int const *n, int const *k,
+                     Real alpha, const Real *A, int lda, int const *offsetsA,
+                     const Real *B, int ldb, int const *offsetsB, Real beta,
+                     Real *C, int ldc, int const *offsetsC, int batchCount,
+                     cudaStream_t stream, int blas_id,
+                     void *growing_allocator) {
   growing_allocator_register_free_c(growing_allocator,
                                     free_gemm_cache<Gemm, Real>);
 
@@ -150,10 +151,11 @@ void run_group_graph(Gemm &&gemm, int m, int *n, int *k, Real alpha,
 
 // stupid simple gemm calls
 template <typename Gemm, typename Real>
-void run_group(Gemm &&gemm, int m, int *n, int *k, Real alpha, const Real *A,
-               int lda, int *offsetsA, const Real *B, int ldb, int *offsetsB,
-               Real beta, Real *C, int ldc, int *offsetsC, int batchCount,
-               cudaStream_t stream, int = -1) {
+void run_group(Gemm &&gemm, int m, int const *n, int const *k, Real alpha,
+               const Real *A, int lda, int const *offsetsA, const Real *B,
+               int ldb, int const *offsetsB, Real beta, Real *C, int ldc,
+               int const *offsetsC, int batchCount, cudaStream_t stream,
+               int = -1, void * = nullptr) {
   for (int i = 0; i < batchCount; ++i) {
     if (m == 0 || n[i] == 0 || k[i] == 0)
       continue;

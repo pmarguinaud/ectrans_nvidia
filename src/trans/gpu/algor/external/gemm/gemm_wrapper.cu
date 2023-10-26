@@ -395,11 +395,11 @@ void cublas_dgemm_wrapper_grouped(int blas_id, cublasOperation_t transa,
                                   int lda, int *offsetsA, const double *B,
                                   int ldb, int *offsetsB, double beta,
                                   double *C, int ldc, int *offsetsC,
-                                  int batchCount, cudaStream_t stream, void *) {
+                                  int batchCount, cudaStream_t stream, void * growing_allocator) {
   using namespace detail;
-  run_group(cublas_gemm_grouped<double>(transa, transb), m, n, k, alpha, A, lda,
+  run_group_graph(cublas_gemm_grouped<double>(transa, transb), m, n, k, alpha, A, lda,
             offsetsA, B, ldb, offsetsB, beta, C, ldc, offsetsC, batchCount,
-            stream, blas_id);
+            stream, blas_id, growing_allocator);
 }
 
 } // namespace

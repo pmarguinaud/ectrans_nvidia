@@ -80,7 +80,8 @@ template <typename Gemm, typename Real> void free_gemm_cache(float *, size_t) {
 
 // this version is using cuda graphs and caches the graphs
 template <typename Gemm, typename Real>
-void run_group_graph(Gemm &&gemm, int const m, int const *n, int const *k,
+#define run_group_graph run_group
+void run_group_graph2(Gemm &&gemm, int const m, int const *n, int const *k,
                      Real alpha, const Real *A, int lda, int const *offsetsA,
                      const Real *B, int ldb, int const *offsetsB, Real beta,
                      Real *C, int ldc, int const *offsetsC, int batchCount,

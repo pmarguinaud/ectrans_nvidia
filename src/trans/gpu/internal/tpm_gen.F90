@@ -1,5 +1,5 @@
 ! (C) Copyright 2000- ECMWF.
-! (C) Copyright 2000- Meteo-France.
+! (C) Copyright 2013- Meteo-France.
 ! 
 ! This software is licensed under the terms of the Apache Licence Version 2.0
 ! which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
@@ -12,7 +12,7 @@ MODULE TPM_GEN
 
 ! Module for general control variables.
 
-USE PARKIND_ECTRANS  ,ONLY : JPIM     ,JPRBT
+USE PARKIND1  ,ONLY : JPIM     ,JPRB
 
 IMPLICIT NONE
 
@@ -38,6 +38,11 @@ LOGICAL   :: LSYNC_TRANS     ! true: activate barriers in trmtol and trltom
 ! 1 = Use ISENDs, use blocking RECVs, add barrier at the end of each cycle
 ! 2 = Use buffered SENDs, use blocking RECVs, add barrier at the end of each cycle
 INTEGER(KIND=JPIM) :: NTRANS_SYNC_LEVEL = 0
+
+! NSTACK_MEMORY_TR : optional memory strategy in gridpoint transpositions
+! = 0 : prefer heap (slower but less memory consuming)
+! > 0 : prefer stack (faster but more memory consuming)
+INTEGER(KIND=JPIM) :: NSTACK_MEMORY_TR = 0
 
 LOGICAL, ALLOCATABLE :: LENABLED(:)   ! true: the resolution is enabled (it has been
                                       ! initialised and has not been released afterward) 

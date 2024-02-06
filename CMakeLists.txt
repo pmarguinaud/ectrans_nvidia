@@ -122,6 +122,7 @@ if( HAVE_GPU )
     if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
         set(CMAKE_CUDA_ARCHITECTURES 70 80)
     endif()
+    set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
 endif()
 
 ectrans_find_lapack()

@@ -19,7 +19,7 @@
 
 #include "../growing_allocator.h"
 
-constexpr bool use_cutlass = true;
+constexpr bool use_cutlass = false;
 
 #define CUDA_CHECK(e)                                                          \
   {                                                                            \
@@ -43,8 +43,8 @@ constexpr bool use_cutlass = true;
   {                                                                            \
     cutlass::Status err = (e);                                                 \
     if (err != cutlass::Status::kSuccess) {                                    \
-      fprintf(stderr, "CUTLASS error: %s, line %d, %s: %i\n", __FILE__,        \
-              __LINE__, #e, (int)err);                                         \
+      fprintf(stderr, "CUTLASS error: %s, line %d, %s: %i %s\n", __FILE__,        \
+              __LINE__, #e, (int)err, cutlass::cutlassGetStatusString(err));                                         \
       exit(EXIT_FAILURE);                                                      \
     }                                                                          \
   }

@@ -71,11 +71,12 @@ foreach( prec sp dp )
     # Propagate "-acc" as link flag for NVHPC Fortran linker
     target_link_options( trans_gpu_object_${prec} INTERFACE $<$<LINK_LANG_AND_ID:Fortran,NVHPC>:-acc -cuda> )
 
-    ectrans_target_fortran_module_directory(
-      TARGET            trans_gpu_object_${prec}
-      MODULE_DIRECTORY  ${PROJECT_BINARY_DIR}/module/trans_gpu_${prec}
-      INSTALL_DIRECTORY module/trans_gpu_${prec}
-    )
+    #We don't build module for the gpu files because they only implemente some part of the functionality, so we will just use the cpu module to compile and then link with the gpu version of the library and then the cpu library to fill the gaps
+    #ectrans_target_fortran_module_directory(
+    #  TARGET            trans_gpu_object_${prec}
+    #  MODULE_DIRECTORY  ${PROJECT_BINARY_DIR}/module/trans_gpu_${prec}
+    #  INSTALL_DIRECTORY module/trans_gpu_${prec}
+    #)
 
     if( HAVE_OMP )
       target_link_libraries( trans_gpu_object_${prec} PRIVATE OpenMP::OpenMP_Fortran )

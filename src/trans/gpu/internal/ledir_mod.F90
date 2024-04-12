@@ -151,9 +151,9 @@ CONTAINS
     !$ACC& PRESENT(ZAA,ZAS,POA1,D_OFFSETS_GEMM1,D_OFFSETS_GEMM2)
 
     ! anti-symmetric
-    IF(KMLOC0 > 0) THEN
-      PRINT*,'computing m=0 in double precision'
-    ENDIF
+    !IF(KMLOC0 > 0) THEN
+    !  PRINT*,'computing m=0 in double precision'
+    !ENDIF
 
     IF (LSYNC_TRANS) THEN
       !$ACC WAIT(1)

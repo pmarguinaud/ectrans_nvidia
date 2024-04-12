@@ -143,9 +143,9 @@ CONTAINS
     !$ACC&     PRESENT(ZAA,ZAS,PIA) &
     !$ACC&     PRESENT(D_MYMS,G_NDGLU,D_OFFSETS_GEMM2)
 
-    IF (KMLOC0 > 0) THEN
-      print*,'computing m=0 in double precision'
-    ENDIF
+    !IF (KMLOC0 > 0) THEN
+    !  print*,'computing m=0 in double precision'
+    !ENDIF
 
     ! READ 2:NSMAX+3
 

@@ -32,20 +32,16 @@ ecbuild_add_option( FEATURE SINGLE_PRECISION
 
 set( HAVE_dp ${HAVE_DOUBLE_PRECISION} )
 
-ecbuild_add_option( FEATURE MKL
-                    DESCRIPTION "Use MKL for BLAS and/or FFTW"
-                    DEFAULT ON
-                    REQUIRED_PACKAGES "MKL QUIET" )
-
-option( FFTW_ENABLE_MKL OFF )
-
 # Following is NVHPC compiler specific and should really be coming from external input
 if( CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC" )
   set( OpenACC_Fortran_FLAGS "-acc -gpu=lineinfo,deepcopy,fastmath,nordc" )
   # Pass cmake command-line option "-DCMAKE_Fortran_FLAGS=-Minfo=acc" for diagnostics info
 endif()
 
+
+
 if( ENABLE_GPU OR ECTRANS_ENABLE_GPU ) # must be explicitly turned ON as FEATURE GPU is OFF by default (see below)
+
   check_language(CUDA)
   find_package(CUDAToolkit)
   find_package(OpenACC COMPONENTS Fortran)
@@ -69,6 +65,7 @@ if( ENABLE_GPU OR ECTRANS_ENABLE_GPU ) # must be explicitly turned ON as FEATURE
   if( NOT TARGET MPI::MPI_C )
     ecbuild_info("No target MPI::MPI_C")
   endif()
+
 endif()
 
 ecbuild_add_option( FEATURE GPU
@@ -90,13 +87,17 @@ ecbuild_add_option( FEATURE GPU_REDUCED_MEMORY
                     DESCRIPTION "Use (slower) code that reduces memory requirements on GPU" )
 
 enable_language( CUDA )
+
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES 70 80)
 endif()
+
 set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
 
 ### Add sources and tests
 include( ectrans_compile_options )
 add_subdirectory( src )
 add_subdirectory( tests )
+
+
 

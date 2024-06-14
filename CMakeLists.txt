@@ -22,11 +22,6 @@ ecbuild_enable_fortran( REQUIRED NO_MODULE_DIRECTORY )
 
 ### Find (optional) dependencies 
 
-ecbuild_add_option( FEATURE OMP
-                    DEFAULT ON
-                    DESCRIPTION "Support for OpenMP shared memory parallelism"
-                    REQUIRED_PACKAGES "OpenMP COMPONENTS Fortran" )
-
 ecbuild_add_option( FEATURE DOUBLE_PRECISION
                     DEFAULT ON
                     DESCRIPTION "Support for Double Precision" )
@@ -35,20 +30,14 @@ ecbuild_add_option( FEATURE SINGLE_PRECISION
                     DEFAULT ON
                     DESCRIPTION "Support for Single Precision" )
 
-if( HAVE_SINGLE_PRECISION )
-  set( single "single" )
-endif()
 set( HAVE_dp ${HAVE_DOUBLE_PRECISION} )
-set( HAVE_sp ${HAVE_SINGLE_PRECISION} )
 
 ecbuild_add_option( FEATURE MKL
                     DESCRIPTION "Use MKL for BLAS and/or FFTW"
                     DEFAULT ON
                     REQUIRED_PACKAGES "MKL QUIET" )
 
-if( NOT HAVE_MKL )
-    option( FFTW_ENABLE_MKL OFF )
-endif()
+option( FFTW_ENABLE_MKL OFF )
 
 # Following is NVHPC compiler specific and should really be coming from external input
 if( CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC" )
@@ -100,29 +89,14 @@ ecbuild_add_option( FEATURE GPU_REDUCED_MEMORY
                     CONDITION HAVE_GPU
                     DESCRIPTION "Use (slower) code that reduces memory requirements on GPU" )
 
-if( HAVE_GPU )
-    enable_language( CUDA )
-    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-        set(CMAKE_CUDA_ARCHITECTURES 70 80)
-    endif()
-    set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
+enable_language( CUDA )
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES 70 80)
 endif()
-
-ectrans_find_lapack()
+set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
 
 ### Add sources and tests
 include( ectrans_compile_options )
 add_subdirectory( src )
 add_subdirectory( tests )
-
-### Export
-if( BUILD_SHARED_LIBS )
-  set( PACKAGE_REQUIRES_PRIVATE_DEPENDENCIES 0 )
-else()
-  set( PACKAGE_REQUIRES_PRIVATE_DEPENDENCIES 1 )
-endif()
-
-ecbuild_install_project( NAME ${PROJECT_NAME} )
-
-ecbuild_print_summary()
 

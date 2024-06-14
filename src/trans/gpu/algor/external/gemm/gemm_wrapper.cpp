@@ -52,9 +52,6 @@ constexpr bool use_cutlass = false;
 namespace {
 namespace detail {
 struct pair_hash {
-  std::size_t operator()(const std::pair<int, int> &p) const {
-    return p.first * 10000 + p.second;
-  }
 };
 } // namespace detail
 

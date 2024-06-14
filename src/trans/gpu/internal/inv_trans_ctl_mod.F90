@@ -92,89 +92,11 @@ CONTAINS
     REAL(KIND=JPHOOK) :: ZHOOK_HANDLE
 
 
-    !*       1.1      PREPARATIONS.
-    IF (LHOOK) CALL DR_HOOK('LE_DGEMM',0,ZHOOK_HANDLE)
+!   !$ACC DATA PRESENT(D,D_MYMS,G,G_NDGLU,R) &
+!   !$ACC&     PRESENT(ZINP,ZOUTS,ZOUTA,ZINP0,ZOUTS0,ZOUTA0) &
+!   !$ACC&     PRESENT(ZAA,ZAS,PIA) &
+!   !$ACC&     PRESENT(D_MYMS,G_NDGLU,D_OFFSETS_GEMM2)
 
-    !     ------------------------------------------------------------------
-
-    !*       1.       PERFORM LEGENDRE TRANFORM.
-    !                 --------------------------
-
-    !*       1.1      PREPARATIONS.
-
-    !$ACC DATA PRESENT(D,D_MYMS,G,G_NDGLU,R) &
-    !$ACC&     PRESENT(ZINP,ZOUTS,ZOUTA,ZINP0,ZOUTS0,ZOUTA0) &
-    !$ACC&     PRESENT(ZAA,ZAS,PIA) &
-    !$ACC&     PRESENT(D_MYMS,G_NDGLU,D_OFFSETS_GEMM2)
-
-    !IF (KMLOC0 > 0) THEN
-    !  print*,'computing m=0 in double precision'
-    !ENDIF
-
-    ! READ 2:NSMAX+3
-
-    !IF KM=0 and NSMAX is 6:
-    !    IA=1
-    !    DO=1,6/2+1 ... 1..4
-    !       PIA_2=1+1+(J-1)*2 ...2+(0..3)*2 .... 2,4,6,8
-    !IF KM=0 and NSMAX is 7:
-    !    IA=2
-    !    DO=1,7/2+1 ... 1..4
-    !       PIA_2=2+1+(1..4-1)*2 ...3+(0..3)*2 .... 3,5,7,9
-
-    !$ACC PARALLEL LOOP COLLAPSE(2) PRIVATE(KM,IA,J) DEFAULT(NONE) ASYNC(1)
-    DO KMLOC=1,D_NUMP
-      DO JK=1,2*KF_LEG
-        KM =  D_MYMS(KMLOC)
-        IA  = 1+MOD(R_NSMAX-KM+2,2)
-        IF(KM /= 0)THEN
-          !$ACC LOOP SEQ
-          DO J=1,(R_NSMAX-KM+2)/2
-            ZINP(JK+(J-1)*IIN_STRIDES0+D_OFFSETS_GEMM2(KMLOC)*IIN_STRIDES0)=PIA(JK,IA+1+(J-1)*2,KMLOC)
-          ENDDO
-        ELSEIF (MOD((JK-1),2) .EQ. 0) THEN
-          ! every other field is sufficient because Im(KM=0) == 0
-          !$ACC LOOP SEQ
-          DO J=1,(R_NSMAX+2)/2
-            ZINP0((JK-1)/2+1+(J-1)*IIN0_STRIDES0) = PIA(JK,IA+1+(J-1)*2,KMLOC)
-          ENDDO
-        ENDIF
-      ENDDO
-    ENDDO
-
-    IF (LSYNC_TRANS) THEN
-      !$ACC WAIT(1)
-      CALL GSTATS(440,0)
-      CALL MPL_BARRIER(CDSTRING='')
-      CALL GSTATS(440,1)
-    ENDIF
-    CALL GSTATS(424,0)
-
-    IF (KMLOC0 > 0) THEN
-      ! compute m=0 in double precision:
-      CALL CUDA_GEMM_BATCHED( &
-        & CUBLAS_OP_N, CUBLAS_OP_T, &
-        & KF_LEG, G%NDGLU(0), (R%NSMAX+2)/2, &
-        & 1.0_JPRD, &
-        & ZINP0, IIN0_STRIDES0, 0, &
-        & ZAA0, SIZE(ZAA0,1), 0, &
-        & 0.0_JPRD, &
-        & ZOUTA0, IOUT0_STRIDES0, 0, &
-        & 1, STREAM=1_C_LONG, ALLOC=ALLOCATOR%PTR)
-    ENDIF
-
-    DO KMLOC=1,D_NUMP
-      KM = D_MYMS(KMLOC)
-      KS(KMLOC) = (R%NSMAX-KM+2)/2
-      NS(KMLOC) = G%NDGLU(KM)
-      AOFFSETS(KMLOC) = IIN_STRIDES0*D_OFFSETS_GEMM2(KMLOC)
-      BOFFSETS(KMLOC) = SIZE(ZAA,1)*SIZE(ZAA,2)*(KMLOC-1)
-      COFFSETS(KMLOC) = IOUT_STRIDES0*D_OFFSETS_GEMM1(KMLOC)
-    ENDDO
-    IF(KMLOC0 > 0) THEN
-      NS(KMLOC0) = 0
-      KS(KMLOC0) = 0
-    ENDIF
     CALL CUDA_GEMM_BATCHED( &
         & 11, & ! unique identifier
         & CUBLAS_OP_N, CUBLAS_OP_T, &
@@ -186,68 +108,9 @@ CONTAINS
         & ZOUTA, IOUT_STRIDES0, COFFSETS, &
         & D_NUMP, STREAM=1_C_LONG, ALLOC=ALLOCATOR%PTR)
 
-    IF (LSYNC_TRANS) THEN
-      !$ACC WAIT(1)
-      CALL GSTATS(444,0)
-      CALL MPL_BARRIER(CDSTRING='')
-      CALL GSTATS(444,1)
-    ENDIF
-    CALL GSTATS(424,1)
+!   !$ACC WAIT(1)
 
-    ! 2. +++++++++++++ symmetric
-    !IF KM=0 and NSMAX is 6:
-    !    IS=2
-    !    DO=1,4
-    !       PIA_2=2+1+(0..3)*2 ... 3+(0..3)*2 ... 3,5,7,9
-    !IF KM=0 and NSMAX is 7:
-    !    IS=1
-    !    DO=1,5
-    !       PIA_2=1+1+(1..5-1)*2 ...2+(0..4)*2 .... 2,4,6,8,10
+!   !$ACC END DATA
 
-    !$ACC PARALLEL LOOP COLLAPSE(2) PRIVATE(KM,IS,J) DEFAULT(NONE) ASYNC(1)
-    DO KMLOC=1,D_NUMP
-      DO JK=1,2*KF_LEG
-        KM =  D_MYMS(KMLOC)
-        IS  = 1+MOD(R_NSMAX-KM+1,2)
-        IF(KM /= 0) THEN
-          !$ACC LOOP SEQ
-          DO J=1,(R_NSMAX-KM+3)/2
-            ZINP(JK+(J-1)*IIN_STRIDES0+D_OFFSETS_GEMM2(KMLOC)*IIN_STRIDES0)=PIA(JK,IS+1+(J-1)*2,KMLOC)
-          ENDDO
-        ELSEIF (MOD((JK-1),2) == 0) THEN
-          !$ACC LOOP SEQ
-          DO J=1,(R_NSMAX+3)/2
-            ZINP0((JK-1)/2+1+(J-1)*IIN0_STRIDES0) = PIA(JK,IS+1+(J-1)*2,KMLOC)
-          ENDDO
-        ENDIF
-      ENDDO
-    ENDDO
-
-    IF (LSYNC_TRANS) THEN
-      !$ACC WAIT(1)
-      CALL GSTATS(440,0)
-      CALL MPL_BARRIER(CDSTRING='')
-      CALL GSTATS(440,1)
-    ENDIF
-    CALL GSTATS(424,0)
-
-    IF (KMLOC0 > 0) THEN
-      CALL CUDA_GEMM_BATCHED( &
-        & CUBLAS_OP_N, CUBLAS_OP_T, &
-        & KF_LEG, G%NDGLU(0), (R%NSMAX+3)/2, &
-        & 1.0_JPRD, &
-        & ZINP0, IIN0_STRIDES0, 0, &
-        & ZAS0, SIZE(ZAS0,1), 0, &
-        & 0.0_JPRD, &
-        & ZOUTS0, IOUT0_STRIDES0, 0, &
-        & 1, STREAM=1_C_LONG, ALLOC=ALLOCATOR%PTR)
-    ENDIF
-
-    !$ACC WAIT(1)
-
-    !$ACC END DATA
-
-    IF (LHOOK) CALL DR_HOOK('LE_DGEMM',1,ZHOOK_HANDLE)
-    !     ------------------------------------------------------------------
   END SUBROUTINE LEINV
 END MODULE INV_TRANS_CTL_MOD

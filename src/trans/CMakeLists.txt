@@ -11,11 +11,3 @@ if( HAVE_GPU )
   add_subdirectory( gpu )
 endif()
 
-## Install trans interface
-
-file( GLOB trans_interface include/ectrans/* )
-install(
-  FILES        ${trans_interface}
-  DESTINATION  include/ectrans
-)
-

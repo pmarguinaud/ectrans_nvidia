@@ -1,4 +1,14 @@
+#define ALIGN(I, A) (((I)+(A)-1)/(A)*(A))
 MODULE INV_TRANS_CTL_MOD
+  USE BUFFERED_ALLOCATOR_MOD
+
+  IMPLICIT NONE
+
+  TYPE LTINV_HANDLE
+    TYPE(ALLOCATION_RESERVATION_HANDLE) :: HPIA_AND_IN
+    TYPE(ALLOCATION_RESERVATION_HANDLE) :: HOUTS_AND_OUTA
+  END TYPE
+
 CONTAINS
   SUBROUTINE INV_TRANS_CTL(KF_UV_G,KF_SCALARS_G,KF_GP,KF_FS,KF_OUT_LT,&
     & KF_UV,KF_SCALARS,KF_SCDERS,&
@@ -76,9 +86,132 @@ CONTAINS
 
 
 
-      CALL LTINV(ALLOCATOR,HLTINV,KF_UV,KF_SCALARS,&
+      CALL LTINV1(ALLOCATOR,HLTINV,KF_UV,KF_SCALARS,&
           & PSPVOR,PSPDIV,PSPSCALAR,PSPSC3A,PSPSC3B,PSPSC2, &
           & ZOUTS,ZOUTA,ZOUTS0,ZOUTA0)
 
   END SUBROUTINE INV_TRANS_CTL
+
+  SUBROUTINE LTINV1(ALLOCATOR,HLTINV,KF_UV,KF_SCALARS,&
+     & PSPVOR,PSPDIV,PSPSCALAR,PSPSC3A,PSPSC3B,PSPSC2, &
+     & ZOUTS,ZOUTA,ZOUTS0,ZOUTA0)
+
+    USE PARKIND_ECTRANS  ,ONLY : JPIM     ,JPRB,   JPRBT
+    USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK, JPHOOK
+
+    USE TPM_DIM         ,ONLY : R
+    USE TPM_TRANS       ,ONLY : LDIVGP, LVORGP, NF_SC2, NF_SC3A, NF_SC3B, LSCDERS
+    USE TPM_FLT
+    USE TPM_GEOMETRY
+    USE TPM_DISTR       ,ONLY : D
+    USE PRFI1B_MOD      ,ONLY : PRFI1B
+    USE VDTUV_MOD       ,ONLY : VDTUV
+    USE SPNSDE_MOD      ,ONLY : SPNSDE
+    USE LEINV_MOD
+    USE ABORT_TRANS_MOD ,ONLY : ABORT_TRANS
+    use ieee_arithmetic
+    USE TPM_FIELDS      ,ONLY : F,ZEPSNM
+    USE MPL_MODULE      ,ONLY : MPL_BARRIER
+    USE TPM_GEN         ,ONLY : LSYNC_TRANS
+    USE TPM_STATS, ONLY : GSTATS => GSTATS_NVTX
+
+
+    !**** *LTINV* - Inverse Legendre transform
+    !
+    !     Purpose.
+    !     --------
+    !        Tranform from Laplace space to Fourier space, compute U and V
+    !        and north/south derivatives of state variables.
+
+    !**   Interface.
+    !     ----------
+    !        *CALL* *LTINV(...)
+
+    !        Explicit arguments :
+    !        --------------------
+    !          KM        - zonal wavenumber
+    !          KMLOC     - local zonal wavenumber
+    !          PSPVOR    - spectral vorticity
+    !          PSPDIV    - spectral divergence
+    !          PSPSCALAR - spectral scalar variables
+
+    !        Implicit arguments :  The Laplace arrays of the model.
+    !        --------------------  The values of the Legendre polynomials
+    !                              The grid point arrays of the model
+    !     Method.
+    !     -------
+
+    !     Externals.
+    !     ----------
+
+    !         PREPSNM - prepare REPSNM for wavenumber KM
+    !         PRFI1B  - prepares the spectral fields
+    !         VDTUV   - compute u and v from vorticity and divergence
+    !         SPNSDE  - compute north-south derivatives
+    !         LEINV   - Inverse Legendre transform
+
+    !     Reference.
+    !     ----------
+    !        ECMWF Research Department documentation of the IFS
+    !        Temperton, 1991, MWR 119 p1303
+
+    !     Author.
+    !     -------
+    !        Mats Hamrud  *ECMWF*
+
+    !     Modifications.
+    !     --------------
+    !        Original : 00-02-01 From LTINV in IFS CY22R1
+    !     ------------------------------------------------------------------
+
+    IMPLICIT NONE
+
+
+    INTEGER(KIND=JPIM), INTENT(IN) :: KF_UV
+    INTEGER(KIND=JPIM), INTENT(IN) :: KF_SCALARS
+
+    REAL(KIND=JPRB)   ,OPTIONAL,INTENT(IN)  :: PSPVOR(:,:)
+    REAL(KIND=JPRB)   ,OPTIONAL,INTENT(IN)  :: PSPDIV(:,:)
+    REAL(KIND=JPRB)   ,OPTIONAL,INTENT(IN)  :: PSPSCALAR(:,:)
+    REAL(KIND=JPRB)   ,OPTIONAL,INTENT(IN)  :: PSPSC2(:,:)
+    REAL(KIND=JPRB)   ,OPTIONAL,INTENT(IN)  :: PSPSC3A(:,:,:)
+    REAL(KIND=JPRB)   ,OPTIONAL,INTENT(IN)  :: PSPSC3B(:,:,:)
+    REAL(KIND=JPRBT), POINTER, INTENT(OUT) :: ZOUTS(:), ZOUTA(:)
+    REAL(KIND=JPRD), POINTER, INTENT(OUT) :: ZOUTS0(:), ZOUTA0(:)
+
+    INTEGER(KIND=JPIM) :: IFIRST, J3
+
+    REAL(KIND=JPRB), POINTER :: PIA_L(:), PIA(:,:,:)
+    REAL(KIND=JPRB), POINTER :: PU(:,:,:), PV(:,:,:), PVOR(:,:,:), PDIV(:,:,:)
+    REAL(KIND=JPRB), POINTER :: PSCALARS(:,:,:), PSCALARS_NSDER(:,:,:)
+
+    REAL(KIND=JPHOOK) :: ZHOOK_HANDLE
+    TYPE(BUFFERED_ALLOCATOR), INTENT(IN) :: ALLOCATOR
+    TYPE(LTINV_HANDLE), INTENT(IN) :: HLTINV
+
+    INTEGER(KIND=JPIM)  :: IOUT_STRIDES0, IOUT_SIZE
+    INTEGER(KIND=JPIM)  :: IOUT0_STRIDES0, IOUT0_SIZE
+    INTEGER(KIND=JPIM)  :: IIN_STRIDES0, IIN_SIZE
+    INTEGER(KIND=JPIM)  :: IIN0_STRIDES0, IIN0_SIZE
+
+    INTEGER(KIND=JPIM) :: IF_READIN, IF_LEG
+    INTEGER(KIND=C_SIZE_T) :: IALLOC_POS, IALLOC_SZ
+
+    REAL(KIND=JPRBT), POINTER :: ZINP(:)
+    REAL(KIND=JPRD), POINTER :: ZINP0(:)
+
+    !     ------------------------------------------------------------------
+
+    !*       1.       PERFORM LEGENDRE TRANFORM.
+    !                 --------------------------
+
+    IF (LHOOK) CALL DR_HOOK('LTINV_MOD',0,ZHOOK_HANDLE)
+
+    CALL LEINV_STRIDES(IF_LEG,IOUT_STRIDES0,IOUT_SIZE,IIN_STRIDES0,IIN_SIZE,&
+                       IOUT0_STRIDES0,IOUT0_SIZE,IIN0_STRIDES0,IIN0_SIZE)
+
+    IF (LHOOK) CALL DR_HOOK('LTINV_MOD',1,ZHOOK_HANDLE)
+    !     ------------------------------------------------------------------
+  END SUBROUTINE LTINV1
+
 END MODULE INV_TRANS_CTL_MOD

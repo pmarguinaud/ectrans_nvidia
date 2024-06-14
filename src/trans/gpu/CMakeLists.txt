@@ -8,21 +8,10 @@
 
 ## Apply workarounds for some known compilers
 
-if(CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC")
-
-  # Compile setup_trans with pinned memory to improve data movement performance. 
-  ectrans_add_compile_options(
-      SOURCES external/setup_trans.F90
-      FLAGS   "-gpu=pinned,deepcopy,fastmath,nordc")
-  # TODO: check if it is sufficient to only set "-gpu=pinned" which appends rather than overwrites
-
-endif()
-
 ## Assemble sources
 
 ecbuild_list_add_pattern( LIST trans_src
                           GLOB
-                                sharedmem/*
                                 algor/*
                                 internal/*
                                 external/*
@@ -110,7 +99,4 @@ foreach( prec sp dp )
     )
   endif()
 endforeach()
-
-
-
 

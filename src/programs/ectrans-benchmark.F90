@@ -618,23 +618,6 @@ do jstep = 1, iters+2
 
   ztstep1(jstep) = timef()
   call gstats(4,0)
-  if (lvordiv) then
-    call inv_trans(kresol=1, kproma=nproma, &
-       & pspsc2=zspsc2,                     & ! spectral surface pressure
-       & pspvor=zspvor,                     & ! spectral vorticity
-       & pspdiv=zspdiv,                     & ! spectral divergence
-       & pspsc3a=zspsc3a,                   & ! spectral scalars
-       & ldscders=lscders,                  &
-       & ldvorgp=.false.,                   & ! no gridpoint vorticity
-       & lddivgp=.false.,                   & ! no gridpoint divergence
-       & lduvder=luvders,                   &
-       & kvsetuv=ivset,                     &
-       & kvsetsc2=ivsetsc,                  &
-       & kvsetsc3a=ivset,                   &
-       & pgp2=zgp2,                         &
-       & pgpuv=zgpuv,                       &
-       & pgp3a=zgp3a)
-  else
     call inv_trans(kresol=1, kproma=nproma, &
        & pspsc2=zspsc2,                     & ! spectral surface pressure
        & pspsc3a=zspsc3a,                   & ! spectral scalars
@@ -643,113 +626,11 @@ do jstep = 1, iters+2
        & kvsetsc3a=ivset,                   &
        & pgp2=zgp2,                         &
        & pgp3a=zgp3a)
-  endif
+
   call gstats(4,1)
 
-  ztstep1(jstep) = (timef() - ztstep1(jstep))/1000.0_jprd
-
-  !=================================================================================================
-  ! While in grid point space, dump the values to disk, for debugging only
-  !=================================================================================================
-
-  if (ldump_values) then
-    ! dump a field to a binary file
-    call dump_gridpoint_field(jstep, myproc, nproma, ngpblks, zgp2(:,1,:),         'S', noutdump)
-    call dump_gridpoint_field(jstep, myproc, nproma, ngpblks, zgpuv(:,nflevg,1,:), 'U', noutdump)
-    call dump_gridpoint_field(jstep, myproc, nproma, ngpblks, zgpuv(:,nflevg,2,:), 'V', noutdump)
-    call dump_gridpoint_field(jstep, myproc, nproma, ngpblks, zgp3a(:,nflevg,1,:), 'T', noutdump)
-  endif
-
-  !=================================================================================================
-  ! Do direct transform
-  !=================================================================================================
-
-  ztstep2(jstep) = timef()
-
-  call gstats(5,0)
-  if (lvordiv) then
-    call dir_trans(kresol=1, kproma=nproma, &
-      & pgp2=zgmvs(:,1:1,:),                &
-      & pgpuv=zgpuv(:,:,1:2,:),             &
-      & pgp3a=zgp3a(:,:,1:nfld,:),          &
-      & pspvor=zspvor,                      &
-      & pspdiv=zspdiv,                      &
-      & pspsc2=zspsc2,                      &
-      & pspsc3a=zspsc3a,                    &
-      & kvsetuv=ivset,                      &
-      & kvsetsc2=ivsetsc,                   &
-      & kvsetsc3a=ivset)
-  else
-    call dir_trans(kresol=1, kproma=nproma, &
-      & pgp2=zgmvs(:,1:1,:),                &
-      & pgp3a=zgp3a(:,:,1:nfld,:),          &
-      & pspsc2=zspsc2,                      &
-      & pspsc3a=zspsc3a,                    &
-      & kvsetsc2=ivsetsc,                   &
-      & kvsetsc3a=ivset)
-  endif
-  call gstats(5,1)
-  ztstep2(jstep) = (timef() - ztstep2(jstep))/1000.0_jprd
-
-  !=================================================================================================
-  ! Calculate timings
-  !=================================================================================================
-
-  ztstep(jstep) = (timef() - ztstep(jstep))/1000.0_jprd
-
-  ztstepavg = ztstepavg + ztstep(jstep)
-  ztstepmin = min(ztstep(jstep), ztstepmin)
-  ztstepmax = max(ztstep(jstep), ztstepmax)
-
-  ztstepavg1 = ztstepavg1 + ztstep1(jstep)
-  ztstepmin1 = min(ztstep1(jstep), ztstepmin1)
-  ztstepmax1 = max(ztstep1(jstep), ztstepmax1)
-
-  ztstepavg2 = ztstepavg2 + ztstep2(jstep)
-  ztstepmin2 = min(ztstep2(jstep), ztstepmin2)
-  ztstepmax2 = max(ztstep2(jstep), ztstepmax2)
-
-  !=================================================================================================
-  ! Print norms
-  !=================================================================================================
-
-  if (lprint_norms) then
-    call gstats(6,0)
-    call specnorm(pspec=zspsc2(1:1,:),         pnorm=znormsp,  kvset=ivsetsc(1:1))
-    call specnorm(pspec=zspvor(1:nflevl,:),    pnorm=znormvor, kvset=ivset(1:nflevg))
-    call specnorm(pspec=zspdiv(1:nflevl,:),    pnorm=znormdiv, kvset=ivset(1:nflevg))
-    call specnorm(pspec=zspsc3a(1:nflevl,:,1), pnorm=znormt,   kvset=ivset(1:nflevg))
-
-    ! Surface pressure
-    zmaxerr(:) = -999.0
-    do ifld = 1, 1
-      zerr(1) = abs(znormsp1(ifld)/znormsp(ifld) - 1.0_jprb)
-      zmaxerr(1) = max(zmaxerr(1), zerr(1))
-    enddo
-    ! Divergence
-    do ifld = 1, nflevg
-      zerr(2) = abs(znormdiv1(ifld)/znormdiv(ifld) - 1.0_jprb)
-      zmaxerr(2) = max(zmaxerr(2), zerr(2))
-    enddo
-    ! Vorticity
-    do ifld = 1, nflevg
-      zerr(3) = abs(znormvor1(ifld)/znormvor(ifld) - 1.0_jprb)
-      zmaxerr(3) = max(zmaxerr(3),zerr(3))
-    enddo
-    ! Temperature
-    do ifld = 1, nflevg
-      zerr(4) = abs(znormt1(ifld)/znormt(ifld) - 1.0_jprb)
-      zmaxerr(4) = max(zmaxerr(4), zerr(4))
-    enddo
-    write(nout,'("time step ",i6," took", f8.4," | zspvor max err="e10.3,&
-                & " | zspdiv max err="e10.3," | zspsc3a max err="e10.3," | zspsc2 max err="e10.3)') &
-                &  jstep, ztstep(jstep), zmaxerr(3), zmaxerr(2), zmaxerr(4), zmaxerr(1)
-    call gstats(6,1)
-  else
-    write(nout,'("Time step ",i6," took", f8.4)') jstep, ztstep(jstep)
-  endif
-  call gstats(3,1)
 enddo
+
 
 contains
 

@@ -222,6 +222,7 @@ character(len=16) :: cgrid = ''
 #include "ec_meminfo.intfb.h"
 
 !===================================================================================================
+stop
 
 luse_mpi = detect_mpirun()
 
@@ -268,6 +269,7 @@ if (ldetailed_stats) then
 !  lstats_mem   = .true.
 !  lstats_alloc = .true.
 endif
+
 
 !===================================================================================================
 
@@ -836,113 +838,6 @@ if (luse_mpi) then
   call mpl_allreduce(ztstepmax2, 'max', ldreprod=.false.)
   call mpl_allreduce(ztstepmin2, 'min', ldreprod=.false.)
 endif
-
-ztstepavg = (ztstepavg/real(nproc,jprb))/real(iters,jprd)
-ztloop = ztloop/real(nproc,jprd)
-ztstep(:) = ztstep(:)/real(nproc,jprd)
-
-call sort(ztstep,iters)
-ztstepmed = ztstep(iters/2)
-
-ztstepavg1 = (ztstepavg1/real(nproc,jprb))/real(iters,jprd)
-ztstep1(:) = ztstep1(:)/real(nproc,jprd)
-
-call sort(ztstep1, iters)
-ztstepmed1 = ztstep1(iters/2)
-
-ztstepavg2 = (ztstepavg2/real(nproc,jprb))/real(iters,jprd)
-ztstep2(:) = ztstep2(:)/real(nproc,jprd)
-
-call sort(ztstep2,iters)
-ztstepmed2 = ztstep2(iters/2)
-
-write(nout,'(a)') '======= Start of time step stats ======='
-write(nout,'(" ")')
-write(nout,'("Inverse transforms")')
-write(nout,'("------------------")')
-write(nout,'("avg  (s): ",f8.4)') ztstepavg1
-write(nout,'("min  (s): ",f8.4)') ztstepmin1
-write(nout,'("max  (s): ",f8.4)') ztstepmax1
-write(nout,'("med  (s): ",f8.4)') ztstepmed1
-write(nout,'(" ")')
-write(nout,'("Direct transforms")')
-write(nout,'("-----------------")')
-write(nout,'("avg  (s): ",f8.4)') ztstepavg2
-write(nout,'("min  (s): ",f8.4)') ztstepmin2
-write(nout,'("max  (s): ",f8.4)') ztstepmax2
-write(nout,'("med  (s): ",f8.4)') ztstepmed2
-write(nout,'(" ")')
-write(nout,'("Inverse-direct transforms")')
-write(nout,'("-------------------------")')
-write(nout,'("avg  (s): ",f8.4)') ztstepavg
-write(nout,'("min  (s): ",f8.4)') ztstepmin
-write(nout,'("max  (s): ",f8.4)') ztstepmax
-write(nout,'("med  (s): ",f8.4)') ztstepmed
-write(nout,'("loop (s): ",f8.4)') ztloop
-write(nout,'(" ")')
-write(nout,'(a)') '======= End of time step stats ======='
-write(nout,'(" ")')
-
-if (lstack) then
-  ! Gather stack usage statistics
-  istack = getstackusage()
-  if (myproc == 1) then
-    print 9000, istack
-    9000 format("Stack utilisation information",/,&
-         &"=============================",//,&
-         &"Task           size(bytes)",/,&
-         &"====           ===========",//,&
-         &"   1",11x,i10)
-
-    do i = 2, nproc
-      call mpl_recv(istack, ksource=nprcids(i), ktag=i, cdstring='transform_test:')
-      print '(i4,11x,i10)', i, istack
-    enddo
-  else
-    call mpl_send(istack, kdest=nprcids(1), ktag=myproc, cdstring='transform_test:')
-  endif
-endif
-
-
-!===================================================================================================
-! Cleanup
-!===================================================================================================
-
-deallocate(zgmv)
-deallocate(zgmvs)
-
-!===================================================================================================
-
-if (lstats) then
-  call gstats(0,1)
-  call gstats_print(nout, zaveave, jpmaxstat)
-endif
-
-if (lmeminfo) then
-  write(nout,*)
-  call ec_meminfo(nout, "", mpl_comm, kbarr=1, kiotask=-1, &
-      & kcall=1)
-endif
-
-!===================================================================================================
-! Finalize MPI
-!===================================================================================================
-
-if (luse_mpi) then
-  call mpl_end(ldmeminfo=.false.)
-endif
-
-!===================================================================================================
-! Close file
-!===================================================================================================
-
-if (nproc > 1) then
-  if (myproc /= 1) then
-    close(unit=nout)
-  endif
-endif
-
-!===================================================================================================
 
 contains
 

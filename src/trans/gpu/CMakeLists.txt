@@ -29,7 +29,6 @@ if( HAVE_GPU_REDUCED_MEMORY )
   endforeach()
 endif()
 
-ecbuild_list_exclude_pattern( LIST trans_src            REGEX dilatation_mod.F90 )
 ecbuild_find_package( NAME NvidiaCutlass REQUIRED)
 
 foreach( prec sp dp )

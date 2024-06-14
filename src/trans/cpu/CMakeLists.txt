@@ -30,10 +30,6 @@ ecbuild_list_add_pattern( LIST trans_src
                           QUIET
                         )
 
-if( NOT HAVE_FFTW )
-  ecbuild_list_exclude_pattern( LIST trans_src REGEX tpm_fftw.F90 )
-endif()
-
 foreach( prec sp dp )
   if( HAVE_${prec} )
 

@@ -116,54 +116,6 @@ CONTAINS
     USE TPM_STATS, ONLY : GSTATS => GSTATS_NVTX
 
 
-    !**** *LTINV* - Inverse Legendre transform
-    !
-    !     Purpose.
-    !     --------
-    !        Tranform from Laplace space to Fourier space, compute U and V
-    !        and north/south derivatives of state variables.
-
-    !**   Interface.
-    !     ----------
-    !        *CALL* *LTINV(...)
-
-    !        Explicit arguments :
-    !        --------------------
-    !          KM        - zonal wavenumber
-    !          KMLOC     - local zonal wavenumber
-    !          PSPVOR    - spectral vorticity
-    !          PSPDIV    - spectral divergence
-    !          PSPSCALAR - spectral scalar variables
-
-    !        Implicit arguments :  The Laplace arrays of the model.
-    !        --------------------  The values of the Legendre polynomials
-    !                              The grid point arrays of the model
-    !     Method.
-    !     -------
-
-    !     Externals.
-    !     ----------
-
-    !         PREPSNM - prepare REPSNM for wavenumber KM
-    !         PRFI1B  - prepares the spectral fields
-    !         VDTUV   - compute u and v from vorticity and divergence
-    !         SPNSDE  - compute north-south derivatives
-    !         LEINV   - Inverse Legendre transform
-
-    !     Reference.
-    !     ----------
-    !        ECMWF Research Department documentation of the IFS
-    !        Temperton, 1991, MWR 119 p1303
-
-    !     Author.
-    !     -------
-    !        Mats Hamrud  *ECMWF*
-
-    !     Modifications.
-    !     --------------
-    !        Original : 00-02-01 From LTINV in IFS CY22R1
-    !     ------------------------------------------------------------------
-
     IMPLICIT NONE
 
 
@@ -205,13 +157,9 @@ CONTAINS
     !*       1.       PERFORM LEGENDRE TRANFORM.
     !                 --------------------------
 
-    IF (LHOOK) CALL DR_HOOK('LTINV_MOD',0,ZHOOK_HANDLE)
-
     CALL LEINV_STRIDES(IF_LEG,IOUT_STRIDES0,IOUT_SIZE,IIN_STRIDES0,IIN_SIZE,&
                        IOUT0_STRIDES0,IOUT0_SIZE,IIN0_STRIDES0,IIN0_SIZE)
 
-    IF (LHOOK) CALL DR_HOOK('LTINV_MOD',1,ZHOOK_HANDLE)
-    !     ------------------------------------------------------------------
   END SUBROUTINE LTINV1
 
 END MODULE INV_TRANS_CTL_MOD

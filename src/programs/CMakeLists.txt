@@ -37,8 +37,6 @@ foreach( prec sp dp )
                            SOURCES ectrans-benchmark.F90
                            LINKER_LANGUAGE Fortran
                            LIBS
-                             fiat
-                             parkind_${prec}
                              trans_${prec}
                           )
 
@@ -47,8 +45,6 @@ foreach( prec sp dp )
                              SOURCES ectrans-benchmark.F90
                              LINKER_LANGUAGE Fortran
                              LIBS
-                               fiat
-                               parkind_${prec}
                                trans_gpu_${prec}
                                OpenACC::OpenACC_Fortran
                             )

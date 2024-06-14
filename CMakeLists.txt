@@ -22,12 +22,6 @@ ecbuild_enable_fortran( REQUIRED NO_MODULE_DIRECTORY )
 
 ### Find (optional) dependencies 
 
-ecbuild_find_package( NAME fiat REQUIRED )
-
-ecbuild_add_option( FEATURE MPI
-                    DESCRIPTION "Support for MPI distributed memory parallelism"
-                    CONDITION fiat_HAVE_MPI )
-
 ecbuild_add_option( FEATURE OMP
                     DEFAULT ON
                     DESCRIPTION "Support for OpenMP shared memory parallelism"
@@ -55,16 +49,6 @@ ecbuild_add_option( FEATURE MKL
 if( NOT HAVE_MKL )
     option( FFTW_ENABLE_MKL OFF )
 endif()
-
-ecbuild_add_option( FEATURE FFTW
-                    DEFAULT ON
-                    DESCRIPTION "Support for fftw"
-                    REQUIRED_PACKAGES "FFTW COMPONENTS double ${single}" )
-
-ecbuild_add_option( FEATURE TRANSI
-                    DEFAULT ON
-                    DESCRIPTION "Compile TransI C-interface to trans"
-                    CONDITION HAVE_DOUBLE_PRECISION )
 
 # Following is NVHPC compiler specific and should really be coming from external input
 if( CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC" )
@@ -104,7 +88,6 @@ ecbuild_add_option( FEATURE GPU
                     CONDITION CMAKE_CUDA_COMPILER
                          AND CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC"
                          AND TARGET OpenACC::OpenACC_Fortran
-                         AND HAVE_MPI AND TARGET MPI::MPI_C AND TARGET MPI::MPI_Fortran
                          AND TARGET CUDA::cublas AND TARGET CUDA::cufft)
 
 ecbuild_add_option( FEATURE GPU_AWARE_MPI

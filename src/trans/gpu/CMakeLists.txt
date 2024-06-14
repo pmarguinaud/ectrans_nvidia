@@ -46,8 +46,6 @@ foreach( prec sp dp )
                        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/algor/interface>
                        $<INSTALL_INTERFACE:include/ectrans>
                        $<INSTALL_INTERFACE:include>
-      PUBLIC_LIBS      parkind_${prec}
-                       fiat
       PRIVATE_LIBS     OpenACC::OpenACC_Fortran
                        CUDA::cufft
                        CUDA::cublas

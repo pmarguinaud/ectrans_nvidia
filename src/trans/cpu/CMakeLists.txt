@@ -45,14 +45,13 @@ foreach( prec sp dp )
                        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include/ectrans>
                        $<INSTALL_INTERFACE:include/ectrans>
                        $<INSTALL_INTERFACE:include>
-      PUBLIC_LIBS      fiat parkind_${prec}
     )
     ectrans_target_fortran_module_directory(
       TARGET            trans_${prec}
       MODULE_DIRECTORY  ${CMAKE_BINARY_DIR}/module/trans_${prec}
       INSTALL_DIRECTORY module/trans_${prec}
     )
-    target_link_libraries( trans_${prec} PUBLIC fiat parkind_${prec} )
+    target_link_libraries( trans_${prec} )
     if( HAVE_FFTW )
       set( FFTW_LINK PRIVATE )
       if( LAPACK_${prec} MATCHES "mkl" AND NOT FFTW_LIBRARIES MATCHES "mkl" )

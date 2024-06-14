@@ -213,7 +213,7 @@ character(len=16) :: cgrid = ''
 
 #include "setup_trans0.h"
 #include "setup_trans.h"
-#include "inv_trans.h"
+!include "inv_trans.h"
 #include "dir_trans.h"
 #include "trans_inq.h"
 #include "specnorm.h"
@@ -224,37 +224,7 @@ character(len=16) :: cgrid = ''
 !===================================================================================================
 stop
 
-
-!===================================================================================================
-! Do spectral transform loop
-!===================================================================================================
-
-gstats_lstats = .false.
-do jstep = 1, iters+2
-  if (jstep == 3) gstats_lstats = .true.
-
-  call gstats(3,0)
-  ztstep(jstep) = timef()
-
-  !=================================================================================================
-  ! Do inverse transform
-  !=================================================================================================
-
-  ztstep1(jstep) = timef()
-  call gstats(4,0)
-    call inv_trans(kresol=1, kproma=nproma, &
-       & pspsc2=zspsc2,                     & ! spectral surface pressure
-       & pspsc3a=zspsc3a,                   & ! spectral scalars
-       & ldscders=lscders,                  & ! scalar derivatives
-       & kvsetsc2=ivsetsc,                  &
-       & kvsetsc3a=ivset,                   &
-       & pgp2=zgp2,                         &
-       & pgp3a=zgp3a)
-
-  call gstats(4,1)
-
-enddo
-
+call inv_trans
 
 end program transform_test
 

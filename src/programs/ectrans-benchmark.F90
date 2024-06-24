@@ -616,6 +616,14 @@ do jstep = 1, iters+2
 
   ztstep1(jstep) = timef()
   call gstats(4,0)
+  !$ACC DATA COPYIN(ZSPVOR,ZSPDIV) 
+  !$ACC DATA COPYIN(ZSPSC2)
+  !$ACC DATA COPYIN(ZSPSC3A)
+  !$ACC DATA COPYIN(ZGPUV)
+  !$ACC DATA COPYIN(ZGP2)
+  !$ACC DATA COPYIN(ZGP3A)
+  
+
   if (lvordiv) then
     call inv_trans(kresol=1, kproma=nproma, &
        & pspsc2=zspsc2,                     & ! spectral surface pressure
@@ -642,7 +650,15 @@ do jstep = 1, iters+2
        & pgp2=zgp2,                         &
        & pgp3a=zgp3a)
   endif
+  !$ACC END DATA
+  !$ACC END DATA
+  !$ACC END DATA
+  !$ACC END DATA
+  !$ACC END DATA
+  !$ACC END DATA
   call gstats(4,1)
+
+  stop 0
 
   ztstep1(jstep) = (timef() - ztstep1(jstep))/1000.0_jprd
 

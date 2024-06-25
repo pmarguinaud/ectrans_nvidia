@@ -602,6 +602,11 @@ ztloop = timef()
 !===================================================================================================
 ! Do spectral transform loop
 !===================================================================================================
+  !$ACC DATA COPYIN(ZSPVOR,ZSPDIV) 
+  !$ACC DATA COPYIN(ZSPSC2)
+  !$ACC DATA COPYIN(ZSPSC3A)
+  !$ACC DATA COPYIN(ZGMV)
+  !$ACC DATA COPYIN(ZGMVS)
 
 gstats_lstats = .false.
 do jstep = 1, iters+2
@@ -616,6 +621,8 @@ do jstep = 1, iters+2
 
   ztstep1(jstep) = timef()
   call gstats(4,0)
+  
+
   if (lvordiv) then
     call inv_trans(kresol=1, kproma=nproma, &
        & pspsc2=zspsc2,                     & ! spectral surface pressure
@@ -712,6 +719,10 @@ do jstep = 1, iters+2
   !=================================================================================================
 
   if (lprint_norms) then
+    !$acc update host(zspvor)
+    !$acc update host(zspdiv)
+    !$acc update host(zspsc2)
+    !$acc update host(zspsc3a)
     call gstats(6,0)
     call specnorm(pspec=zspsc2(1:1,:),         pnorm=znormsp,  kvset=ivsetsc(1:1))
     call specnorm(pspec=zspvor(1:nflevl,:),    pnorm=znormvor, kvset=ivset(1:nflevg))
@@ -749,6 +760,11 @@ do jstep = 1, iters+2
   call gstats(3,1)
 enddo
 
+  !$ACC END DATA
+  !$ACC END DATA
+  !$ACC END DATA
+  !$ACC END DATA
+  !$ACC END DATA
 !===================================================================================================
 
 ztloop = (timef() - ztloop)/1000.0_jprd

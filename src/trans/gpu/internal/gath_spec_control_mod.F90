@@ -97,9 +97,6 @@ LOGICAL            :: LLZA0IP
 
 !     ------------------------------------------------------------------
 
-PRINT*,"ECTRANS-GPU ERROR: GATH_SPEC_CONTROL should not be called"
-STOP
-
 ! Compute help array for distribution
 
 DO JA=1,NPRTRW
